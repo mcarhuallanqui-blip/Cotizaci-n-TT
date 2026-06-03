@@ -580,17 +580,60 @@ function showResultPanel(data) {
 }
 
 // ─── STATS ────────────────────────────────────────────────────────────
+function getFilteredData() {
+  const q = (document.getElementById('list-search')?.value||'').toLowerCase();
+  const dateFrom = document.getElementById('filter-date-from')?.value;
+  const dateTo   = document.getElementById('filter-date-to')?.value;
+  const dFrom = dateFrom ? new Date(dateFrom) : null;
+  const dTo   = dateTo   ? new Date(dateTo)   : null;
+  const hasFilter = q || dFrom || dTo;
+
+  if (!hasFilter) return { data: cotizaciones, filtered: false };
+
+  const data = cotizaciones.filter(c => {
+    if (q && !(
+      (c.nombre_proyecto||'').toLowerCase().includes(q) ||
+      (c.solicitante||'').toLowerCase().includes(q) ||
+      (c.num_cotizacion||'').toLowerCase().includes(q) ||
+      (c.encargado||'').toLowerCase().includes(q)
+    )) return false;
+    if (dFrom || dTo) {
+      const cDate = parseDate(c.fecha_envio_correo);
+      if (!cDate) return false;
+      if (dFrom && cDate < dFrom) return false;
+      if (dTo   && cDate > dTo)   return false;
+    }
+    return true;
+  });
+  return { data, filtered: true };
+}
+
 function updateStats() {
-  const total = cotizaciones.filter(c=>c.id<1000000).length;
-  const totalHistorico = cotizaciones.filter(c=>c.id>=1000000).length;
-  const monto = cotizaciones.reduce((s,c)=>s+(c.ppto_con_fee||0),0);
-  const aprobadas = cotizaciones.filter(c=>c.aprobado==='SI').length;
-  const pending = cotizaciones.filter(c=>!c.num_po||c.num_po.trim()==='').length;
-  document.getElementById('stat-total').textContent    = total;
-  const shi = document.getElementById('stat-historico'); if(shi) shi.textContent = '+ '+totalHistorico+' histórico';
-  document.getElementById('stat-monto').textContent    = 'S/ '+monto.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g,',');
-  document.getElementById('stat-aprobadas').textContent= aprobadas;
-  document.getElementById('stat-pending').textContent  = pending;
+  const { data: filtered, filtered: isFiltered } = getFilteredData();
+  const totalHistorico = cotizaciones.filter(c=>c.is_historico).length;
+
+  const total     = filtered.filter(c=>!c.is_historico).length;
+  const monto     = filtered.reduce((s,c)=>s+(c.ppto_con_fee||0),0);
+  const aprobadas = filtered.filter(c=>c.aprobado==='SI').length;
+  const pending   = filtered.filter(c=>!c.num_po||c.num_po.trim()==='').length;
+
+  const fmt = n => 'S/ ' + n.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g,',');
+
+  document.getElementById('stat-total').textContent     = total;
+  document.getElementById('stat-monto').textContent     = fmt(monto);
+  document.getElementById('stat-aprobadas').textContent = aprobadas;
+  document.getElementById('stat-pending').textContent   = pending;
+
+  const shi = document.getElementById('stat-historico');
+  if (shi) shi.textContent = isFiltered ? '(filtrado)' : '+ '+totalHistorico+' histórico';
+
+  // Visual indicator when filtering
+  const statMonto = document.querySelector('.stat-card.highlight');
+  if (statMonto) {
+    statMonto.style.borderColor = isFiltered ? 'var(--blue)' : '';
+    const label = statMonto.querySelector('.sc-label');
+    if (label) label.textContent = isFiltered ? 'MONTO FILTRADO' : 'MONTO TOTAL';
+  }
 }
 
 // ─── RESET ────────────────────────────────────────────────────────────
@@ -710,27 +753,7 @@ function sortList(col) {
 }
 
 function renderList() {
-  const q = (document.getElementById('list-search')?.value||'').toLowerCase();
-  const dateFrom = document.getElementById('filter-date-from')?.value;
-  const dateTo   = document.getElementById('filter-date-to')?.value;
-  const dFrom = dateFrom ? new Date(dateFrom) : null;
-  const dTo   = dateTo   ? new Date(dateTo)   : null;
-
-  let data = cotizaciones.filter(c => {
-    if (q && !(
-      (c.nombre_proyecto||'').toLowerCase().includes(q) ||
-      (c.solicitante||'').toLowerCase().includes(q) ||
-      (c.num_cotizacion||'').toLowerCase().includes(q) ||
-      (c.encargado||'').toLowerCase().includes(q)
-    )) return false;
-    if (dFrom || dTo) {
-      const cDate = parseDate(c.fecha_envio_correo);
-      if (!cDate) return false;
-      if (dFrom && cDate < dFrom) return false;
-      if (dTo   && cDate > dTo)   return false;
-    }
-    return true;
-  });
+  let data = getFilteredData().data;
 
   data.sort((a,b) => {
     let va = a[sortCol], vb = b[sortCol];
