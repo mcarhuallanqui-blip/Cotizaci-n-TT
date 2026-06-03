@@ -298,7 +298,7 @@ table.cot-list tbody td input:focus,table.cot-list tbody td select:focus{border-
 
 <div class="action-bar" id="form-action-bar">
   <button class="btn btn-ghost" onclick="resetForm()">🗑 Limpiar</button>
-  <button class="btn btn-primary" onclick="submitForm()">⚡ Guardar + Generar PDF</button>
+  <button class="btn btn-primary" id="btn-submit" onclick="submitForm()">⚡ Guardar + Generar PDF</button>
 </div>
 </div>
 
@@ -582,6 +582,8 @@ async function submitForm() {
       cotizaciones[idx] = data;
       editingId = null;
       hideOverlay();
+      const btnS = document.getElementById('btn-submit');
+      if (btnS) { btnS.textContent = '⚡ Guardar + Generar PDF'; btnS.style.background = ''; }
       showToast('✅ Cotización #'+data.num+' actualizada','success');
       showResultPanel(data);
     } catch(e) { hideOverlay(); showToast('Error: '+e.message,'error'); }
@@ -691,6 +693,8 @@ function resetForm() {
   addItem();
   recalcTotals();
   document.getElementById('result-panel').classList.remove('show');
+  const btnR = document.getElementById('btn-submit');
+  if (btnR) { btnR.textContent = '⚡ Guardar + Generar PDF'; btnR.style.background = ''; }
   autoNumCotizacion();
 }
 
@@ -920,9 +924,13 @@ function editCot(id) {
       const dEl = document.getElementById('desc-'+sid);
       const qEl = document.getElementById('qty-'+sid);
       const uEl = document.getElementById('unit-'+sid);
+      const pEl = document.getElementById('ptt-'+sid);
+      const mEl = document.getElementById('margen-'+sid);
       if (dEl) dEl.value = sItem.descripcion||'';
       if (qEl) qEl.value = sItem.cantidad||1;
       if (uEl) uEl.value = sItem.precio_unitario||0;
+      if (pEl) pEl.value = sItem.ptt||0;
+      if (mEl) mEl.value = sItem.margen||0;
       calcRow(sid);
     }, 50);
   });
@@ -940,12 +948,15 @@ function editCot(id) {
       if (dEl) dEl.value = snapName;
       if (qEl) qEl.value = 1;
       if (uEl) uEl.value = snapCosto>0?snapCosto.toFixed(2):'0';
+      if (document.getElementById('ptt-'+snapId)) document.getElementById('ptt-'+snapId).value = snapCosto>0?snapCosto.toFixed(2):'0';
       calcRow(snapId);
     }, 50);
   }
   editingId = id;
   updateCotNum();
-  showToast('Editando cotización #'+c.num,'success');
+  const btn = document.getElementById('btn-submit');
+  if (btn) { btn.textContent = '✏️ Actualizar Cotización'; btn.style.background = 'var(--blue)'; }
+  showToast('Editando cotización #'+c.num+' — haz clic en Actualizar cuando termines','success');
 }
 
 
