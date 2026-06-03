@@ -539,7 +539,7 @@ function gatherData() {
     factura:           document.getElementById('factura').value,
     bat_facturo:       document.getElementById('bat_facturo').value,
     observaciones:     document.getElementById('observaciones').value,
-    costo_proyecto:    subtotal,
+    costo_proyecto:    items.reduce((s,i)=>s+(i.ptt||0),0) || subtotal,
     ppto_con_fee:      parseFloat((subtotal*(1+fee)).toFixed(2)),
     items
   };
