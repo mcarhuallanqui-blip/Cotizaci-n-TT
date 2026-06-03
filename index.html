@@ -245,6 +245,10 @@ table.cot-list tbody td input:focus,table.cot-list tbody td select:focus{border-
             <div class="field"><label>N° PO</label><input type="text" id="num_po" placeholder="5700000000"></div>
             <div class="field"><label>WBS</label><input type="text" id="wbs" placeholder="Código WBS"></div>
           </div>
+          <div class="field">
+            <label>Guía de Remisión</label>
+            <input type="text" id="massiel_po" placeholder="N° Guía de remisión">
+          </div>
           <input type="hidden" id="massiel_po" value="">
           <input type="hidden" id="dentro_archivo" value="">
           <input type="hidden" id="factura" value="">
@@ -913,7 +917,7 @@ function exportExcel() {
     'ENCARGADO','FEE','FECHA ENVÍO CORREO','FECHA EJECUCIÓN','SOLICITANTE',
     'APROBADO','CORREO','NOMBRE DEL PROYECTO','MES DE FACTURACION',
     'PPTO CON FEE','COSTO PROYECTO','WBS','NUM PO',
-    'MASSIEL PIDE PO + GUIA','¿DENTRO DE ARCHIVO FACTURACIÓN?','¿FACTURA?','¿BAT LO FACTURO?'
+    'GUIA DE REMISIÓN','¿DENTRO DE ARCHIVO FACTURACIÓN?','¿FACTURA?','¿BAT LO FACTURO?'
   ];
 
   function toExcelDate(str) {
