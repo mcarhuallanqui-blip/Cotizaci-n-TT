@@ -266,11 +266,14 @@ table.cot-list tbody td input:focus,table.cot-list tbody td select:focus{border-
             <table class="items">
               <thead>
                 <tr>
-                  <th style="width:40%">Descripción</th>
-                  <th style="width:13%">Cant.</th>
-                  <th style="width:15%">P. Unit (S/)</th>
-                  <th style="width:16%">Total (S/)</th>
-                  <th style="width:6%"></th>
+                  <th style="width:28%">Descripción</th>
+                  <th style="width:8%">Cant.</th>
+                  <th style="width:11%">P. Unit (S/)</th>
+                  <th style="width:10%">Total (S/)</th>
+                  <th style="width:11%" title="Precio TT (costo interno)" style="background:#1a2a1a;">P. TT (S/)</th>
+                  <th style="width:10%" title="Margen sobre precio TT">Margen %</th>
+                  <th style="width:12%" title="Precio Final = P.TT + Margen" style="color:#4ade80;">P. Final (S/)</th>
+                  <th style="width:5%"></th>
                 </tr>
               </thead>
               <tbody id="items-body"></tbody>
@@ -280,7 +283,12 @@ table.cot-list tbody td input:focus,table.cot-list tbody td select:focus{border-
           <div class="totals-panel">
             <div class="totals-row"><span class="label">Subtotal</span><span class="value" id="t-subtotal">S/ 0.00</span></div>
             <div class="totals-row"><span class="label" id="t-fee-label">Fee (6.5%)</span><span class="value" id="t-fee">S/ 0.00</span></div>
-            <div class="totals-row grand"><span class="label">TOTAL</span><span class="value" id="t-total">S/ 0.00</span></div>
+            <div class="totals-row grand"><span class="label">TOTAL CLIENTE</span><span class="value" id="t-total">S/ 0.00</span></div>
+            <div style="border-top:1px solid #1e3a2f;margin-top:8px;padding-top:10px;">
+              <div class="totals-row"><span class="label" style="color:#86efac;">∑ P. TT</span><span class="value" style="color:#86efac;" id="t-ptt">S/ 0.00</span></div>
+              <div class="totals-row"><span class="label" style="color:#4ade80;">∑ P. Final</span><span class="value" style="color:#4ade80;" id="t-pfinal">S/ 0.00</span></div>
+              <div class="totals-row" style="margin-top:4px;"><span class="label" style="color:#fde047;font-weight:700;">💰 Ganancia</span><span class="value" style="color:#fde047;font-size:16px;" id="t-ganancia">S/ 0.00</span></div>
+            </div>
           </div>
         </div>
       </div>
@@ -423,10 +431,13 @@ function addItem() {
   const tr = document.createElement('tr');
   tr.id = `item-row-${id}`;
   tr.innerHTML = `
-    <td><input type="text" placeholder="Descripción del servicio" id="desc-${id}" style="min-width:120px"></td>
+    <td><input type="text" placeholder="Descripción del servicio" id="desc-${id}" style="min-width:100px"></td>
     <td><input type="number" value="1" min="0" step="any" id="qty-${id}" oninput="calcRow(${id})"></td>
     <td><input type="number" value="0" min="0" step="0.01" id="unit-${id}" oninput="calcRow(${id})"></td>
     <td class="total-cell" id="total-${id}">0.00</td>
+    <td><input type="number" value="0" min="0" step="0.01" id="ptt-${id}" oninput="calcRow(${id})" placeholder="0" style="background:#f0fdf4;border-color:#86efac;"></td>
+    <td><input type="number" value="0" min="0" step="0.1" id="margen-${id}" oninput="calcRow(${id})" placeholder="%" style="background:#fefce8;border-color:#fde047;"></td>
+    <td class="total-cell" id="pfinal-${id}" style="color:#16a34a;font-weight:700;">0.00</td>
     <td><button class="btn-del" onclick="removeItem(${id})">✕</button></td>`;
   tbody.appendChild(tr);
 }
@@ -438,16 +449,32 @@ function removeItem(id) {
 }
 
 function calcRow(id) {
-  const qty  = parseFloat(document.getElementById(`qty-${id}`)?.value)  || 0;
-  const unit = parseFloat(document.getElementById(`unit-${id}`)?.value) || 0;
-  const cell = document.getElementById(`total-${id}`);
-  if (cell) cell.textContent = (qty * unit).toFixed(2);
+  const qty    = parseFloat(document.getElementById('qty-'+id)?.value)    || 0;
+  const unit   = parseFloat(document.getElementById('unit-'+id)?.value)   || 0;
+  const ptt    = parseFloat(document.getElementById('ptt-'+id)?.value)    || 0;
+  const margen = parseFloat(document.getElementById('margen-'+id)?.value) || 0;
+
+  const total  = qty * unit;
+  const pfinal = ptt > 0 ? ptt * (1 + margen / 100) : 0;
+
+  const cellTotal  = document.getElementById('total-'+id);
+  const cellPfinal = document.getElementById('pfinal-'+id);
+  if (cellTotal)  cellTotal.textContent  = total.toFixed(2);
+  if (cellPfinal) cellPfinal.textContent = pfinal > 0 ? pfinal.toFixed(2) : '-';
   recalcTotals();
 }
 
 function recalcTotals() {
   let subtotal = 0;
   document.querySelectorAll('[id^="total-"]').forEach(c => subtotal += parseFloat(c.textContent)||0);
+
+  let sumPtt = 0, sumPfinal = 0;
+  document.querySelectorAll('[id^="ptt-"]').forEach(el => sumPtt += parseFloat(el.value)||0);
+  document.querySelectorAll('[id^="pfinal-"]').forEach(el => {
+    const v = parseFloat(el.textContent);
+    if (!isNaN(v)) sumPfinal += v;
+  });
+
   const feeSelect = document.getElementById('fee');
   let feePct = feeSelect.value === 'custom'
     ? (parseFloat(document.getElementById('fee_custom')?.value)||0)/100
@@ -455,11 +482,21 @@ function recalcTotals() {
   document.getElementById('fee-custom-field').style.display = feeSelect.value==='custom'?'block':'none';
   const feeAmt = subtotal * feePct;
   const total  = subtotal + feeAmt;
+  const ganancia = sumPfinal - sumPtt;
   const fmt = n => 'S/ ' + n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,',');
-  document.getElementById('t-subtotal').textContent = fmt(subtotal);
-  document.getElementById('t-fee').textContent      = fmt(feeAmt);
-  document.getElementById('t-total').textContent    = fmt(total);
-  document.getElementById('t-fee-label').textContent = `Fee (${(feePct*100).toFixed(1)}%)`;
+  document.getElementById('t-subtotal').textContent  = fmt(subtotal);
+  document.getElementById('t-fee').textContent       = fmt(feeAmt);
+  document.getElementById('t-total').textContent     = fmt(total);
+  document.getElementById('t-fee-label').textContent = 'Fee ('+(feePct*100).toFixed(1)+'%)';
+  const tPtt    = document.getElementById('t-ptt');
+  const tPfinal = document.getElementById('t-pfinal');
+  const tGan    = document.getElementById('t-ganancia');
+  if (tPtt)    tPtt.textContent    = sumPtt    > 0 ? fmt(sumPtt)    : '-';
+  if (tPfinal) tPfinal.textContent = sumPfinal > 0 ? fmt(sumPfinal) : '-';
+  if (tGan) {
+    tGan.textContent  = ganancia !== 0 ? fmt(ganancia) : '-';
+    tGan.style.color  = ganancia > 0 ? '#fde047' : ganancia < 0 ? '#f87171' : '#94a3b8';
+  }
 }
 
 document.getElementById('fee').addEventListener('change', recalcTotals);
@@ -472,7 +509,10 @@ function gatherData() {
     const desc = document.getElementById(`desc-${id}`)?.value||'';
     const qty  = parseFloat(document.getElementById(`qty-${id}`)?.value)||0;
     const unit = parseFloat(document.getElementById(`unit-${id}`)?.value)||0;
-    if (desc.trim()||unit>0) items.push({descripcion:desc,cantidad:qty,precio_unitario:unit,precio_total:qty*unit});
+    const ptt    = parseFloat(document.getElementById('ptt-'+id)?.value)||0;
+    const margen = parseFloat(document.getElementById('margen-'+id)?.value)||0;
+    const pfinal = ptt > 0 ? ptt*(1+margen/100) : 0;
+    if (desc.trim()||unit>0) items.push({descripcion:desc,cantidad:qty,precio_unitario:unit,precio_total:qty*unit,ptt,margen,pfinal});
   });
   const feeSelect = document.getElementById('fee');
   const fee = feeSelect.value==='custom'
