@@ -25,7 +25,7 @@ body{font-family:'DM Sans',sans-serif;background:#F8FAFC;color:var(--dark);min-h
 .page{display:none;}.page.active{display:block;}
 
 /* CONTAINER */
-.container{max-width:1100px;margin:0 auto;padding:1.5rem;}
+.container{max-width:1300px;margin:0 auto;padding:1.5rem;}
 .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:1rem;}
 
 /* CARD */
@@ -114,8 +114,8 @@ table.items tbody td input:focus{border-color:var(--red);}
 .list-search{padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;width:240px;outline:none;font-family:'DM Sans',sans-serif;}
 .list-search:focus{border-color:var(--red);}
 
-.cot-table-wrap{overflow-x:auto;border-radius:12px;border:1px solid var(--border);background:white;}
-table.cot-list{width:100%;border-collapse:collapse;font-size:12.5px;min-width:900px;}
+.cot-table-wrap{overflow-x:auto;border-radius:12px;border:1px solid var(--border);background:white;min-height:400px;}
+table.cot-list{width:100%;border-collapse:collapse;font-size:12.5px;min-width:1100px;}
 table.cot-list thead th{background:var(--dark);color:#94A3B8;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:10px 10px;text-align:left;cursor:pointer;white-space:nowrap;user-select:none;}
 table.cot-list thead th:hover{color:white;}
 table.cot-list thead th.sorted-asc::after{content:" ▲";}
@@ -344,6 +344,7 @@ table.cot-list tbody td input:focus,table.cot-list tbody td select:focus{border-
           <th onclick="sortList('encargado')" data-col="encargado">Encargado</th>
           <th onclick="sortList('fecha_envio_correo')" data-col="fecha_envio_correo">F. Envío</th>
           <th onclick="sortList('fecha_ejecucion')" data-col="fecha_ejecucion">F. Ejecución</th>
+          <th onclick="sortList('correo')" data-col="correo">Correo</th>
           <th onclick="sortList('nombre_proyecto')" data-col="nombre_proyecto">Proyecto</th>
           <th onclick="sortList('ppto_con_fee')" data-col="ppto_con_fee">Ppto c/Fee</th>
           <th>Aprobado</th>
@@ -639,8 +640,9 @@ function getFilteredData() {
   const q = (document.getElementById('list-search')?.value||'').toLowerCase();
   const dateFrom = document.getElementById('filter-date-from')?.value;
   const dateTo   = document.getElementById('filter-date-to')?.value;
-  const dFrom = dateFrom ? new Date(dateFrom) : null;
-  const dTo   = dateTo   ? new Date(dateTo)   : null;
+  // Parse as local date (avoid UTC offset shifting the day)
+  const dFrom = dateFrom ? (() => { const p=dateFrom.split('-'); return new Date(+p[0],+p[1]-1,+p[2]); })() : null;
+  const dTo   = dateTo   ? (() => { const p=dateTo.split('-');   return new Date(+p[0],+p[1]-1,+p[2],23,59,59,999); })() : null;
   const hasFilter = q || dFrom || dTo;
 
   if (!hasFilter) return { data: cotizaciones, filtered: false };
@@ -650,13 +652,15 @@ function getFilteredData() {
       (c.nombre_proyecto||'').toLowerCase().includes(q) ||
       (c.solicitante||'').toLowerCase().includes(q) ||
       (c.num_cotizacion||'').toLowerCase().includes(q) ||
-      (c.encargado||'').toLowerCase().includes(q)
+      (c.encargado||'').toLowerCase().includes(q) ||
+      (c.correo||'').toLowerCase().includes(q)
     )) return false;
     if (dFrom || dTo) {
       const cDate = parseDate(c.fecha_envio_correo);
       if (!cDate) return false;
       if (dFrom && cDate < dFrom) return false;
-      if (dTo   && cDate > dTo)   return false;
+      // Include full end day
+      if (dTo && cDate > dTo) return false;
     }
     return true;
   });
@@ -853,6 +857,7 @@ function renderList() {
       <td>${(c.encargado||'-').toUpperCase()}</td>
       <td><span class="num-mono" style="font-size:11px;">${c.fecha_envio_correo||'-'}</span></td>
       <td><span class="num-mono" style="font-size:11px;">${c.fecha_ejecucion||'-'}</span></td>
+      <td style="max-width:160px;font-size:11px;color:#64748B;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${c.correo||''}">${c.correo||'-'}</td>
       <td style="max-width:180px;font-size:11px;">${(c.nombre_proyecto||'').toUpperCase()}</td>
       <td><span class="num-mono" style="color:var(--green);font-weight:700;">${fmt(c.ppto_con_fee)}</span></td>
       <td>${badgeAprobado(c.aprobado)}</td>
@@ -1137,9 +1142,25 @@ async function saveToSupabase(record) {
     costo_proyecto: record.costo_proyecto, ppto_con_fee: record.ppto_con_fee,
     items: record.items||[], is_historico: record.is_historico||false
   };
-  if (record.id && record.id > 0) {
+  // Real Supabase id: positive number AND not a fake historico id (< 1000000)
+  const hasRealId = record.id && record.id > 0 && record.id < 1000000;
+  if (hasRealId) {
+    // UPDATE existing record
     await sbFetch('cotizaciones?id=eq.' + record.id, {method:'PATCH', prefer:'return=representation', body:JSON.stringify(payload)});
+  } else if (record.id >= 1000000) {
+    // HISTORICO: check if it already exists in Supabase by num_cotizacion
+    const existing = await sbFetch('cotizaciones?num_cotizacion=eq.' + encodeURIComponent(record.num_cotizacion) + '&limit=1');
+    if (existing && existing.length > 0) {
+      // Already saved before - update it
+      record.id = existing[0].id;
+      await sbFetch('cotizaciones?id=eq.' + record.id, {method:'PATCH', prefer:'return=representation', body:JSON.stringify(payload)});
+    } else {
+      // First time saving this historico - insert it
+      const res = await sbFetch('cotizaciones', {method:'POST', prefer:'return=representation', body:JSON.stringify(payload)});
+      if (res && res[0]) record.id = res[0].id;
+    }
   } else {
+    // New record
     const res = await sbFetch('cotizaciones', {method:'POST', prefer:'return=representation', body:JSON.stringify(payload)});
     if (res && res[0]) record.id = res[0].id;
   }
