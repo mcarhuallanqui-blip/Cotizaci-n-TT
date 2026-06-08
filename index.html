@@ -193,6 +193,7 @@ table.cot-list tbody td input:focus,table.cot-list tbody td select:focus{border-
       <a id="dl-pdf" href="#" class="btn btn-primary" download>⬇ Descargar PDF</a>
       <button class="btn btn-success" onclick="exportExcel()">⬇ Descargar Excel (.xlsx)</button>
       <button class="btn btn-blue" onclick="showPage('page-list')">📋 Ver todas las cotizaciones</button>
+      <button class="btn btn-ghost" onclick="newCotizacion()">+ Nueva Cotización</button>
     </div>
   </div>
 
@@ -593,15 +594,6 @@ async function submitForm() {
       if (btnS) { btnS.textContent = '⚡ Guardar + Generar PDF'; btnS.style.background = ''; }
       showToast('✅ Cotización #'+data.num+' actualizada','success');
       showResultPanel(data);
-      // Auto-reset form after edit to prevent accidental duplicate saves
-      setTimeout(() => {
-        document.getElementById('items-body').innerHTML = '';
-        itemCounter = 0;
-        addItem();
-        recalcTotals();
-        autoNumCotizacion();
-        document.getElementById('result-panel').classList.remove('show');
-      }, 100);
     } catch(e) { hideOverlay(); showToast('Error: '+e.message,'error'); }
 
   } else {
@@ -702,6 +694,20 @@ function updateStats() {
 }
 
 // ─── RESET ────────────────────────────────────────────────────────────
+function newCotizacion() {
+  document.getElementById('result-panel').classList.remove('show');
+  editingId = null;
+  const btnS = document.getElementById('btn-submit');
+  if (btnS) { btnS.textContent = '⚡ Guardar + Generar PDF'; btnS.style.background = ''; }
+  ['encargado','aprobado'].forEach(id=>{document.getElementById(id).value='';});
+  ['nombre_proyecto','solicitante','correo','observaciones','num_po','wbs'].forEach(id=>{document.getElementById(id).value='';});
+  document.getElementById('items-body').innerHTML='';
+  itemCounter=0;
+  addItem();
+  recalcTotals();
+  autoNumCotizacion();
+}
+
 function resetForm() {
   if (!confirm('¿Limpiar todos los campos?')) return;
   editingId = null;
