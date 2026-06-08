@@ -266,13 +266,14 @@ table.cot-list tbody td input:focus,table.cot-list tbody td select:focus{border-
             <table class="items">
               <thead>
                 <tr>
-                  <th style="width:28%">Descripción</th>
-                  <th style="width:8%">Cant.</th>
-                  <th style="width:11%">P. Unit (S/)</th>
-                  <th style="width:10%">Total (S/)</th>
-                  <th style="width:11%" title="Precio TT (costo interno)" style="background:#1a2a1a;">P. TT (S/)</th>
-                  <th style="width:10%" title="Margen sobre precio TT">Margen %</th>
-                  <th style="width:12%" title="Precio Final = P.TT + Margen" style="color:#4ade80;">P. Final (S/)</th>
+                  <th style="width:24%">Descripción</th>
+                  <th style="width:10%">Provincia</th>
+                  <th style="width:7%">Cant.</th>
+                  <th style="width:10%">P. Unit (S/)</th>
+                  <th style="width:9%">Total (S/)</th>
+                  <th style="width:10%" title="Precio TT (costo interno)">P. TT (S/)</th>
+                  <th style="width:9%" title="Margen sobre precio TT">Margen %</th>
+                  <th style="width:11%" title="Precio Final = P.TT + Margen" style="color:#4ade80;">P. Final (S/)</th>
                   <th style="width:5%"></th>
                 </tr>
               </thead>
@@ -432,7 +433,8 @@ function addItem() {
   const tr = document.createElement('tr');
   tr.id = `item-row-${id}`;
   tr.innerHTML = `
-    <td><input type="text" placeholder="Descripción del servicio" id="desc-${id}" style="min-width:100px"></td>
+    <td><input type="text" placeholder="Descripción del servicio" id="desc-${id}" style="min-width:90px"></td>
+    <td><input type="text" placeholder="Lima / Prov." id="prov-${id}" style="min-width:70px;font-size:12px;"></td>
     <td><input type="number" value="1" min="0" step="any" id="qty-${id}" oninput="calcRow(${id})"></td>
     <td><input type="number" value="0" min="0" step="0.01" id="unit-${id}" oninput="calcRow(${id})"></td>
     <td class="total-cell" id="total-${id}">0.00</td>
@@ -510,10 +512,11 @@ function gatherData() {
     const desc = document.getElementById(`desc-${id}`)?.value||'';
     const qty  = parseFloat(document.getElementById(`qty-${id}`)?.value)||0;
     const unit = parseFloat(document.getElementById(`unit-${id}`)?.value)||0;
-    const ptt    = parseFloat(document.getElementById('ptt-'+id)?.value)||0;
-    const margen = parseFloat(document.getElementById('margen-'+id)?.value)||0;
-    const pfinal = ptt > 0 ? ptt*(1+margen/100) : 0;
-    if (desc.trim()||unit>0) items.push({descripcion:desc,cantidad:qty,precio_unitario:unit,precio_total:qty*unit,ptt,margen,pfinal});
+    const ptt      = parseFloat(document.getElementById('ptt-'+id)?.value)||0;
+    const margen   = parseFloat(document.getElementById('margen-'+id)?.value)||0;
+    const pfinal   = ptt > 0 ? ptt*(1+margen/100) : 0;
+    const provincia = document.getElementById('prov-'+id)?.value||'';
+    if (desc.trim()||unit>0) items.push({descripcion:desc,cantidad:qty,precio_unitario:unit,precio_total:qty*unit,ptt,margen,pfinal,provincia});
   });
   const feeSelect = document.getElementById('fee');
   const fee = feeSelect.value==='custom'
@@ -945,6 +948,8 @@ function editCot(id) {
       if (uEl) uEl.value = sItem.precio_unitario||0;
       if (pEl) pEl.value = sItem.ptt||0;
       if (mEl) mEl.value = sItem.margen||0;
+      const prEl = document.getElementById('prov-'+sid);
+      if (prEl) prEl.value = sItem.provincia||'';
       calcRow(sid);
     }, 50);
   });
