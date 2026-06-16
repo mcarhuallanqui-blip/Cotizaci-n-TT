@@ -1162,7 +1162,7 @@ async function saveToSupabase(record) {
     items: record.items||[], is_historico: record.is_historico||false
   };
 
-  // If we have a real Supabase id (not a fake historico id), just PATCH
+  // If we already know the real Supabase id, just PATCH
   if (record.supabase_id) {
     await sbFetch('cotizaciones?id=eq.' + record.supabase_id, {
       method: 'PATCH', prefer: 'return=representation', body: JSON.stringify(payload)
@@ -1170,32 +1170,24 @@ async function saveToSupabase(record) {
     return record;
   }
 
-  // UPSERT by num_cotizacion to avoid duplicates
-  try {
+  // Always check if num_cotizacion already exists before inserting
+  const existing = await sbFetch('cotizaciones?num_cotizacion=eq.' + encodeURIComponent(record.num_cotizacion) + '&limit=1');
+  if (existing && existing.length > 0) {
+    // Already exists — just update it
+    const existingId = existing[0].id;
+    await sbFetch('cotizaciones?id=eq.' + existingId, {
+      method: 'PATCH', prefer: 'return=representation', body: JSON.stringify(payload)
+    });
+    record.supabase_id = existingId;
+    record.id = existingId;
+  } else {
+    // New record — insert
     const res = await sbFetch('cotizaciones', {
-      method: 'POST',
-      prefer: 'return=representation,resolution=merge-duplicates',
-      headers: { 'On-Conflict': 'num_cotizacion' },
-      body: JSON.stringify(payload)
+      method: 'POST', prefer: 'return=representation', body: JSON.stringify(payload)
     });
     if (res && res[0]) {
       record.supabase_id = res[0].id;
       record.id = res[0].id;
-    }
-  } catch(e) {
-    // If unique constraint error (409), find existing and PATCH it
-    if (e.message && e.message.includes('23505')) {
-      const existing = await sbFetch('cotizaciones?num_cotizacion=eq.' + encodeURIComponent(record.num_cotizacion) + '&limit=1');
-      if (existing && existing.length > 0) {
-        const existingId = existing[0].id;
-        await sbFetch('cotizaciones?id=eq.' + existingId, {
-          method: 'PATCH', prefer: 'return=representation', body: JSON.stringify(payload)
-        });
-        record.supabase_id = existingId;
-        record.id = existingId;
-      }
-    } else {
-      throw e;
     }
   }
   return record;
