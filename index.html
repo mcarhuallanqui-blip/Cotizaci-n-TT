@@ -576,9 +576,10 @@ async function submitForm() {
     const idx = cotizaciones.findIndex(c=>c.id===editingId);
     if (idx < 0) return;
     const existing = cotizaciones[idx];
-    data.num     = existing.num;
-    data.id      = existing.id;
-    data.created = existing.created;
+    data.num         = existing.num;
+    data.id          = existing.id;
+    data.supabase_id = existing.supabase_id;
+    data.created     = existing.created;
     if (data.costo_proyecto <= 0 && existing.costo_proyecto > 0) {
       data.costo_proyecto = existing.costo_proyecto;
       data.ppto_con_fee   = existing.ppto_con_fee;
@@ -1132,7 +1133,7 @@ async function loadFromSupabase() {
       if (page.length < pageSize) break;
       from += pageSize;
     }
-    cotizaciones = all.map(r => ({...r, items: r.items||[]}));
+    cotizaciones = all.map(r => ({...r, items: r.items||[], supabase_id: r.id}));
     hideOverlay();
     renderList();
     updateStats();
@@ -1159,39 +1160,42 @@ async function saveToSupabase(record) {
     costo_proyecto: record.costo_proyecto, ppto_con_fee: record.ppto_con_fee,
     items: record.items||[], is_historico: record.is_historico||false
   };
-  // Real Supabase id: positive number AND not a fake historico id (< 1000000)
-  const hasRealId = record.id && record.id > 0 && record.id < 1000000;
-  if (hasRealId) {
-    // UPDATE existing record
-    await sbFetch('cotizaciones?id=eq.' + record.id, {method:'PATCH', prefer:'return=representation', body:JSON.stringify(payload)});
-  } else if (record.id >= 1000000) {
-    // HISTORICO: check if it already exists in Supabase by num_cotizacion
-    const existing = await sbFetch('cotizaciones?num_cotizacion=eq.' + encodeURIComponent(record.num_cotizacion) + '&limit=1');
-    if (existing && existing.length > 0) {
-      // Already saved before - update it
-      record.id = existing[0].id;
-      await sbFetch('cotizaciones?id=eq.' + record.id, {method:'PATCH', prefer:'return=representation', body:JSON.stringify(payload)});
-    } else {
-      // First time saving this historico - insert it
-      const res = await sbFetch('cotizaciones', {method:'POST', prefer:'return=representation', body:JSON.stringify(payload)});
-      if (res && res[0]) record.id = res[0].id;
-    }
-  } else {
-    // New record
-    const res = await sbFetch('cotizaciones', {method:'POST', prefer:'return=representation', body:JSON.stringify(payload)});
-    if (res && res[0]) record.id = res[0].id;
+
+  // If we have a real Supabase id (not a fake historico id), just PATCH
+  if (record.supabase_id) {
+    await sbFetch('cotizaciones?id=eq.' + record.supabase_id, {
+      method: 'PATCH', prefer: 'return=representation', body: JSON.stringify(payload)
+    });
+    return record;
+  }
+
+  // Otherwise UPSERT by num_cotizacion to avoid duplicates
+  const res = await sbFetch('cotizaciones', {
+    method: 'POST',
+    prefer: 'return=representation,resolution=merge-duplicates',
+    headers: { 'On-Conflict': 'num_cotizacion' },
+    body: JSON.stringify(payload)
+  });
+  if (res && res[0]) {
+    record.supabase_id = res[0].id;
+    record.id = res[0].id; // update local id to real one
   }
   return record;
 }
 
 async function deleteFromSupabase(id) {
-  await sbFetch('cotizaciones?id=eq.' + id, {method:'DELETE'});
+  const record = cotizaciones.find(c => c.id === id);
+  const realId = (record && record.supabase_id) ? record.supabase_id : id;
+  await sbFetch('cotizaciones?id=eq.' + realId, {method:'DELETE'});
 }
 
 async function updateFieldSupabase(id, field, value) {
+  // id could be a fake historico id - find the real supabase_id from local array
+  const record = cotizaciones.find(c => c.id === id);
+  const realId = (record && record.supabase_id) ? record.supabase_id : id;
   const payload = {};
   payload[field] = value;
-  await sbFetch('cotizaciones?id=eq.' + id, {method:'PATCH', body:JSON.stringify(payload)});
+  await sbFetch('cotizaciones?id=eq.' + realId, {method:'PATCH', body:JSON.stringify(payload)});
 }
 
 function saveCotizaciones(data) { cotizaciones = data; }
