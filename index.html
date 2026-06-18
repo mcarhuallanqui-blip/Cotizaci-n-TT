@@ -617,9 +617,9 @@ async function submitForm() {
 }
 
 function showResultPanel(data) {
-  // Use sum of item prices (client-facing), not internal cost
-  const subtotal = (data.items||[]).reduce((s,i) => s+(i.precio_total||0), 0) || data.ppto_con_fee / (1 + data.fee);
-  const feeAmt   = subtotal * data.fee;
+  const itemsSubtotal = (data.items||[]).reduce((s,i) => s+(i.precio_total||0), 0);
+  const subtotal = itemsSubtotal > 0 ? itemsSubtotal : (data.ppto_con_fee / (1 + (data.fee||0.065)));
+  const feeAmt   = subtotal * (data.fee||0.065);
   const total    = subtotal + feeAmt;
   const fmt = n => 'S/ ' + n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,',');
   document.getElementById('res-subtotal').textContent = fmt(subtotal);
@@ -727,9 +727,15 @@ function resetForm() {
 
 // ─── PDF BUILDER ──────────────────────────────────────────────────────
 function buildPDFBlob(data, total, feeAmt) {
-  // Subtotal = sum of item prices (client price), not internal cost
-  const subtotal = (data.items||[]).reduce((s,i) => s + (i.precio_total||0), 0) || (total / (1 + data.fee));
-  const feePct   = (data.fee*100).toFixed(1);
+  // Subtotal from items if available, otherwise derive from ppto_con_fee
+  const itemsSubtotal = (data.items||[]).reduce((s,i) => s + (i.precio_total||0), 0);
+  const subtotal = itemsSubtotal > 0 ? itemsSubtotal : (data.ppto_con_fee / (1 + (data.fee||0.065)));
+  const recalcFeeAmt = subtotal * (data.fee||0.065);
+  const recalcTotal  = subtotal + recalcFeeAmt;
+  // Override passed-in values with correct ones
+  feeAmt = recalcFeeAmt;
+  total  = recalcTotal;
+  const feePct = ((data.fee||0.065)*100).toFixed(1);
   const fmt = n => 'S/ '+n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,',');
   const anyShowPU = (data.items||[]).some(i => i.showPU !== false);
   const rows = (data.items||[]).map((item,i)=>`
