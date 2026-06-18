@@ -348,6 +348,7 @@ table.cot-list tbody td input:focus,table.cot-list tbody td select:focus{border-
       <option value="aprobado">Aprobado</option>
       <option value="mes_facturacion">Mes Facturación</option>
       <option value="num_po">N° PO</option>
+      <option value="massiel_po">Guía de Remisión</option>
     </select>
     <div id="bulk-value-wrap" style="display:none;">
       <select id="bulk-value-select" style="padding:6px 10px;border-radius:6px;font-size:12px;border:none;background:#1E293B;color:white;display:none;">
@@ -616,7 +617,7 @@ async function submitForm() {
       hideOverlay();
       const btnS = document.getElementById('btn-submit');
       if (btnS) { btnS.textContent = '⚡ Guardar + Generar PDF'; btnS.style.background = ''; }
-      showToast('✅ Cotización #'+data.num+' actualizada','success');
+      showToast('✅ Cotización #'+data.num+' actualizada en Supabase ✔','success');
       showResultPanel(data);
     } catch(e) { hideOverlay(); showToast('Error: '+e.message,'error'); }
 
@@ -633,9 +634,20 @@ async function submitForm() {
       data.id = saved.id || data.id;
       cotizaciones.unshift(data);
       hideOverlay();
-      showToast('✅ Cotización #'+data.num+' guardada','success');
+      showToast('✅ Cotización #'+data.num+' guardada en Supabase ✔','success');
       showResultPanel(data);
-    } catch(e) { hideOverlay(); showToast('Error guardando: '+e.message,'error'); }
+    } catch(e) {
+      hideOverlay();
+      console.error('Save error:', e);
+      // Show clear error - do NOT show success
+      showToast('❌ Error al guardar: ' + (e.message||'revisa tu conexión'), 'error');
+      // Show persistent error in result panel area
+      const panel = document.getElementById('result-panel');
+      panel.style.background = '#FEF2F2';
+      panel.style.border = '1.5px solid #FCA5A5';
+      panel.innerHTML = '<div style="display:flex;align-items:center;gap:10px;"><span style="font-size:22px;">❌</span><div><div style="font-weight:700;font-size:14px;color:#DC2626">Error al guardar — cotización NO registrada</div><div style="font-size:12px;color:#64748B;margin-top:4px;">' + (e.message||'Verifica tu conexión a internet e intenta de nuevo') + '</div><button onclick="submitForm()" class="btn btn-primary" style="margin-top:10px;font-size:12px;">🔄 Reintentar</button></div></div>';
+      panel.classList.add('show');
+    }
   }
 }
 
@@ -1043,7 +1055,16 @@ function editCot(id) {
 
 
 // ─── EXPORT EXCEL ────────────────────────────────────────────────────
-function exportExcel() {
+async function exportExcel() {
+  showOverlay('Preparando Excel...');
+  try {
+    // Reload fresh data from Supabase before exporting (silent = no UI changes)
+    await loadFromSupabase(true);
+  } catch(e) {
+    hideOverlay();
+    showToast('⚠ Error al cargar datos: ' + e.message, 'error');
+    return;
+  }
   if (cotizaciones.length===0) { showToast('No hay cotizaciones para exportar','error'); return; }
   const sorted = [...cotizaciones].sort((a,b)=>(a.num||0)-(b.num||0));
   const headers = [
@@ -1121,6 +1142,7 @@ function exportExcel() {
   ws2['!cols']=[{wch:18},{wch:40},{wch:40},{wch:12},{wch:18},{wch:18}];
   XLSX.utils.book_append_sheet(wb,ws2,'Detalle por Encargado');
 
+  hideOverlay();
   XLSX.writeFile(wb,`DETALLE_PRESUPUESTOS_${new Date().getFullYear()}.xlsx`);
   showToast('✅ Excel descargado con '+rows.length+' cotizaciones','success');
 }
@@ -1195,7 +1217,7 @@ function updateBulkValueOptions() {
     }
   } else if (field === 'mes_facturacion') {
     mon.style.display = 'inline-block';
-  } else if (field === 'num_po') {
+  } else if (field === 'num_po' || field === 'massiel_po') {
     txt.style.display = 'inline-block';
   }
 }
@@ -1210,7 +1232,7 @@ async function applyBulkEdit() {
   } else if (field === 'mes_facturacion') {
     const mon = document.getElementById('bulk-value-month').value;
     if (mon) { const [y,m] = mon.split('-'); value = m+'/'+y; }
-  } else if (field === 'num_po') {
+  } else if (field === 'num_po' || field === 'massiel_po') {
     value = document.getElementById('bulk-value-text').value;
   }
 
@@ -1271,10 +1293,9 @@ async function sbFetch(path, opts={}) {
   return txt ? JSON.parse(txt) : null;
 }
 
-async function loadFromSupabase() {
-  showOverlay('Cargando cotizaciones...');
+async function loadFromSupabase(silent=false) {
+  if (!silent) showOverlay('Cargando cotizaciones...');
   try {
-    // Load in pages to avoid timeout on large datasets
     let all = [];
     let from = 0;
     const pageSize = 500;
@@ -1286,16 +1307,18 @@ async function loadFromSupabase() {
       from += pageSize;
     }
     cotizaciones = all.map(r => ({...r, items: r.items||[], supabase_id: r.id}));
-    hideOverlay();
-    renderList();
-    updateStats();
+    if (!silent) {
+      hideOverlay();
+      renderList();
+      updateStats();
+    }
     console.log('Loaded', cotizaciones.length, 'cotizaciones from Supabase');
     return cotizaciones;
   } catch(e) {
-    hideOverlay();
+    if (!silent) hideOverlay();
     console.error('Load error:', e);
-    showToast('⚠ Error cargando datos: ' + e.message, 'error');
-    return [];
+    if (!silent) showToast('⚠ Error cargando datos: ' + e.message, 'error');
+    throw e;
   }
 }
 
