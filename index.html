@@ -726,7 +726,8 @@ function resetForm() {
 
 // ─── PDF BUILDER ──────────────────────────────────────────────────────
 function buildPDFBlob(data, total, feeAmt) {
-  const subtotal = data.costo_proyecto;
+  // Subtotal = sum of item prices (client price), not internal cost
+  const subtotal = (data.items||[]).reduce((s,i) => s + (i.precio_total||0), 0) || (total / (1 + data.fee));
   const feePct   = (data.fee*100).toFixed(1);
   const fmt = n => 'S/ '+n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,',');
   const anyShowPU = (data.items||[]).some(i => i.showPU !== false);
