@@ -323,7 +323,10 @@ table.cot-list tbody td input:focus,table.cot-list tbody td select:focus{border-
 
   <div class="list-header">
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-      <input type="text" class="list-search" id="list-search" placeholder="🔍 Buscar proyecto, solicitante..." oninput="renderList()">
+      <div style="position:relative;display:inline-block;">
+        <input type="text" class="list-search" id="list-search" placeholder="🔍 Buscar proyecto, solicitante, correo..." oninput="renderList()" style="padding-right:32px;">
+        <button onclick="document.getElementById('list-search').value='';renderList();" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#94A3B8;font-size:15px;line-height:1;padding:0;" title="Limpiar búsqueda">✕</button>
+      </div>
       <div style="display:flex;align-items:center;gap:6px;">
         <label style="font-size:11px;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;">F. Envío:</label>
         <input type="date" id="filter-date-from" onchange="renderList()" style="padding:7px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;outline:none;color:var(--dark);">
