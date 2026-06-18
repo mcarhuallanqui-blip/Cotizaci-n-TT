@@ -617,9 +617,10 @@ async function submitForm() {
 }
 
 function showResultPanel(data) {
-  const subtotal = data.costo_proyecto;
+  // Use sum of item prices (client-facing), not internal cost
+  const subtotal = (data.items||[]).reduce((s,i) => s+(i.precio_total||0), 0) || data.ppto_con_fee / (1 + data.fee);
   const feeAmt   = subtotal * data.fee;
-  const total    = data.ppto_con_fee;
+  const total    = subtotal + feeAmt;
   const fmt = n => 'S/ ' + n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,',');
   document.getElementById('res-subtotal').textContent = fmt(subtotal);
   document.getElementById('res-fee').textContent      = fmt(feeAmt);
