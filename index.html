@@ -338,10 +338,35 @@ table.cot-list tbody td input:focus,table.cot-list tbody td select:focus{border-
     </div>
   </div>
 
-  <div class="cot-table-wrap">
+  <div id="bulk-bar" style="display:none;background:var(--dark);border-radius:10px;padding:12px 16px;margin-bottom:10px;display:none;align-items:center;gap:12px;flex-wrap:wrap;">
+  <span style="color:white;font-size:13px;font-weight:600;" id="bulk-count">0 seleccionadas</span>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+    <select id="bulk-field" onchange="updateBulkValueOptions()" style="padding:6px 10px;border-radius:6px;font-size:12px;border:none;background:#1E293B;color:white;">
+      <option value="">-- Campo a editar --</option>
+      <option value="factura">¿Factura?</option>
+      <option value="dentro_archivo">¿Dentro Arch. Fact.?</option>
+      <option value="aprobado">Aprobado</option>
+      <option value="mes_facturacion">Mes Facturación</option>
+      <option value="num_po">N° PO</option>
+    </select>
+    <div id="bulk-value-wrap" style="display:none;">
+      <select id="bulk-value-select" style="padding:6px 10px;border-radius:6px;font-size:12px;border:none;background:#1E293B;color:white;display:none;">
+        <option value="SI">SI</option>
+        <option value="NO">NO</option>
+        <option value="PENDIENTE">PENDIENTE</option>
+      </select>
+      <input type="text" id="bulk-value-text" placeholder="Valor..." style="padding:6px 10px;border-radius:6px;font-size:12px;border:none;background:#1E293B;color:white;display:none;width:140px;">
+      <input type="month" id="bulk-value-month" style="padding:6px 10px;border-radius:6px;font-size:12px;border:none;background:#1E293B;color:white;display:none;">
+    </div>
+    <button onclick="applyBulkEdit()" class="btn btn-primary" style="padding:6px 14px;font-size:12px;">✅ Aplicar a seleccionadas</button>
+    <button onclick="clearSelection()" class="btn btn-ghost" style="padding:6px 12px;font-size:12px;">✕ Cancelar</button>
+  </div>
+</div>
+<div class="cot-table-wrap">
     <table class="cot-list" id="cot-list">
       <thead>
         <tr>
+          <th style="width:36px;text-align:center;"><input type="checkbox" id="chk-all" onchange="toggleSelectAll(this)" style="width:15px;height:15px;cursor:pointer;accent-color:var(--red);"></th>
           <th onclick="sortList('num')" data-col="num">#</th>
           <th onclick="sortList('num_cotizacion')" data-col="num_cotizacion">N° Cotización</th>
           <th onclick="sortList('encargado')" data-col="encargado">Encargado</th>
@@ -366,9 +391,7 @@ table.cot-list tbody td input:focus,table.cot-list tbody td select:focus{border-
   </div>
 
 </div>
-<div class="action-bar" id="list-action-bar" style="display:none;">
-  <button class="btn btn-success" onclick="exportExcel()">⬇ Exportar Excel completo</button>
-</div>
+<div class="action-bar" id="list-action-bar" style="display:none;"></div>
 </div>
 
 <!-- OVERLAY -->
@@ -874,6 +897,7 @@ function renderList() {
   data.forEach(c => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
+      <td style="text-align:center;"><input type="checkbox" class="row-chk" data-id="${c.id}" style="width:15px;height:15px;cursor:pointer;accent-color:var(--red);" onchange="updateBulkBar()"></td>
       <td><span class="num-mono" style="font-weight:700;color:${c.is_historico?'#94A3B8':'var(--red)'}">${c.is_historico?'H':''}${c.num||'-'}</span></td>
       <td><span class="num-mono">${c.num_cotizacion||''}</span></td>
       <td>${(c.encargado||'-').toUpperCase()}</td>
@@ -900,6 +924,7 @@ function renderList() {
       </td>
       <td>
         <div class="action-cell">
+          <button class="btn-icon" onclick="downloadPDFFromList(${c.id})" title="Descargar PDF">📄</button>
           <button class="btn-icon" onclick="editCot(${c.id})" title="Editar">✏️</button>
           <button class="btn-icon del" onclick="deleteCot(${c.id})" title="Eliminar">🗑</button>
         </div>
@@ -910,6 +935,23 @@ function renderList() {
 }
 
 // ─── CRUD ─────────────────────────────────────────────────────────────
+function downloadPDFFromList(id) {
+  const c = cotizaciones.find(x => x.id === id);
+  if (!c) return;
+  const itemsSubtotal = (c.items||[]).reduce((s,i) => s+(i.precio_total||0), 0);
+  const subtotal = itemsSubtotal > 0 ? itemsSubtotal : (c.ppto_con_fee / (1 + (c.fee||0.065)));
+  const feeAmt   = subtotal * (c.fee||0.065);
+  const total    = subtotal + feeAmt;
+  const blob = buildPDFBlob(c, total, feeAmt);
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = 'Cotizacion_' + (c.num_cotizacion||'cot') + '.html';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  showToast('📄 PDF generado: ' + (c.num_cotizacion||''), 'success');
+}
+
 function updateField(id, field, value) {
   const idx = cotizaciones.findIndex(c=>c.id===id);
   if (idx<0) return;
@@ -1091,6 +1133,107 @@ function showOverlay(txt) {
 }
 function hideOverlay() {
   document.getElementById('overlay').classList.remove('show');
+}
+
+
+// ─── BULK EDIT ────────────────────────────────────────────────────────
+function getSelectedIds() {
+  return [...document.querySelectorAll('.row-chk:checked')].map(el => parseInt(el.dataset.id));
+}
+
+function updateBulkBar() {
+  const ids = getSelectedIds();
+  const bar = document.getElementById('bulk-bar');
+  const count = document.getElementById('bulk-count');
+  if (ids.length > 0) {
+    bar.style.display = 'flex';
+    count.textContent = ids.length + ' seleccionada' + (ids.length > 1 ? 's' : '');
+  } else {
+    bar.style.display = 'none';
+  }
+  // Update select-all checkbox state
+  const allChks = document.querySelectorAll('.row-chk');
+  const chkAll = document.getElementById('chk-all');
+  if (chkAll) {
+    chkAll.checked = allChks.length > 0 && ids.length === allChks.length;
+    chkAll.indeterminate = ids.length > 0 && ids.length < allChks.length;
+  }
+}
+
+function toggleSelectAll(chk) {
+  document.querySelectorAll('.row-chk').forEach(el => el.checked = chk.checked);
+  updateBulkBar();
+}
+
+function clearSelection() {
+  document.querySelectorAll('.row-chk').forEach(el => el.checked = false);
+  const chkAll = document.getElementById('chk-all');
+  if (chkAll) { chkAll.checked = false; chkAll.indeterminate = false; }
+  document.getElementById('bulk-bar').style.display = 'none';
+  document.getElementById('bulk-field').value = '';
+  updateBulkValueOptions();
+}
+
+function updateBulkValueOptions() {
+  const field = document.getElementById('bulk-field').value;
+  const wrap  = document.getElementById('bulk-value-wrap');
+  const sel   = document.getElementById('bulk-value-select');
+  const txt   = document.getElementById('bulk-value-text');
+  const mon   = document.getElementById('bulk-value-month');
+
+  wrap.style.display = field ? 'flex' : 'none';
+  sel.style.display  = 'none';
+  txt.style.display  = 'none';
+  mon.style.display  = 'none';
+
+  if (field === 'factura' || field === 'dentro_archivo' || field === 'aprobado') {
+    sel.style.display = 'inline-block';
+    if (field === 'aprobado') {
+      sel.innerHTML = '<option value="SI">SI</option><option value="NO">NO</option>';
+    } else {
+      sel.innerHTML = '<option value="SI">SI</option><option value="NO">NO</option><option value="PENDIENTE">PENDIENTE</option>';
+    }
+  } else if (field === 'mes_facturacion') {
+    mon.style.display = 'inline-block';
+  } else if (field === 'num_po') {
+    txt.style.display = 'inline-block';
+  }
+}
+
+async function applyBulkEdit() {
+  const field = document.getElementById('bulk-field').value;
+  if (!field) { showToast('Selecciona un campo a editar', 'error'); return; }
+
+  let value = '';
+  if (field === 'factura' || field === 'dentro_archivo' || field === 'aprobado') {
+    value = document.getElementById('bulk-value-select').value;
+  } else if (field === 'mes_facturacion') {
+    const mon = document.getElementById('bulk-value-month').value;
+    if (mon) { const [y,m] = mon.split('-'); value = m+'/'+y; }
+  } else if (field === 'num_po') {
+    value = document.getElementById('bulk-value-text').value;
+  }
+
+  const ids = getSelectedIds();
+  if (ids.length === 0) { showToast('Selecciona al menos una cotización', 'error'); return; }
+
+  showOverlay('Actualizando ' + ids.length + ' cotizaciones...');
+  let errors = 0;
+  for (const id of ids) {
+    try {
+      await updateFieldSupabase(id, field, value);
+      const idx = cotizaciones.findIndex(c => c.id === id);
+      if (idx >= 0) cotizaciones[idx][field] = value;
+    } catch(e) { errors++; }
+  }
+  hideOverlay();
+  clearSelection();
+  renderList();
+  if (errors === 0) {
+    showToast('✅ ' + ids.length + ' cotizaciones actualizadas', 'success');
+  } else {
+    showToast('⚠ ' + (ids.length - errors) + ' actualizadas, ' + errors + ' con error', 'error');
+  }
 }
 
 function showToast(msg, type='success') {
