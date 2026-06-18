@@ -441,8 +441,21 @@ window.onload = () => {
 function autoNumCotizacion() {
   const yr = new Date().getFullYear();
   const mo = String(new Date().getMonth()+1).padStart(2,'0');
-  const existing = cotizaciones.filter(c => c.num_cotizacion && c.num_cotizacion.startsWith('COT-'+yr) && !c.is_historico).length;
-  const seq = String(existing + 1).padStart(3,'0');
+
+  // Buscar el mayor número correlativo entre TODAS las cotizaciones del año
+  // para evitar duplicados aunque los datos no hayan cargado completamente
+  let maxSeq = 0;
+  cotizaciones.forEach(c => {
+    if (!c.num_cotizacion) return;
+    // Acepta formato COT-2026-MMXXX o COT-2026-XXX
+    const match = c.num_cotizacion.match(/^COT-(\d{4})-\d{0,2}(\d{3})$/);
+    if (match && parseInt(match[1]) === yr) {
+      const seq = parseInt(match[2]);
+      if (seq > maxSeq) maxSeq = seq;
+    }
+  });
+
+  const seq = String(maxSeq + 1).padStart(3,'0');
   const num = `COT-${yr}-${mo}${seq}`;
   document.getElementById('num_cotizacion').value = num;
   updateCotNum();
@@ -1316,6 +1329,8 @@ async function loadFromSupabase(silent=false) {
       updateStats();
     }
     console.log('Loaded', cotizaciones.length, 'cotizaciones from Supabase');
+    // Regenerar número ahora que tenemos los datos reales (solo si no estamos editando)
+    if (!editingId) autoNumCotizacion();
     return cotizaciones;
   } catch(e) {
     if (!silent) hideOverlay();
