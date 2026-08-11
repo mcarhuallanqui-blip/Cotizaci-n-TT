@@ -352,6 +352,7 @@ table.cot-list tbody td input:focus,table.cot-list tbody td select:focus{border-
       <option value="mes_facturacion">Mes Facturación</option>
       <option value="num_po">N° PO</option>
       <option value="massiel_po">Guía de Remisión</option>
+      <option value="wbs">WBS</option>
     </select>
     <div id="bulk-value-wrap" style="display:none;">
       <select id="bulk-value-select" style="padding:6px 10px;border-radius:6px;font-size:12px;border:none;background:#1E293B;color:white;display:none;">
@@ -438,27 +439,33 @@ window.onload = () => {
   document.getElementById('list-action-bar').style.display = 'none';
 };
 
-function autoNumCotizacion() {
-  const yr = new Date().getFullYear();
-  const mo = String(new Date().getMonth()+1).padStart(2,'0');
-
-  // Buscar el mayor número correlativo entre TODAS las cotizaciones del año
-  // para evitar duplicados aunque los datos no hayan cargado completamente
-  let maxSeq = 0;
-  cotizaciones.forEach(c => {
-    if (!c.num_cotizacion) return;
-    // Acepta formato COT-2026-MMXXX o COT-2026-XXX
-    const match = c.num_cotizacion.match(/^COT-(\d{4})-\d{0,2}(\d{3})$/);
-    if (match && parseInt(match[1]) === yr) {
-      const seq = parseInt(match[2]);
-      if (seq > maxSeq) maxSeq = seq;
+async function autoNumCotizacion() {
+  const yr  = new Date().getFullYear();
+  const mo  = String(new Date().getMonth()+1).padStart(2,'0');
+  try {
+    // Query Supabase for the highest COT number this year to avoid collisions
+    const result = await sbFetch(
+      `cotizaciones?num_cotizacion=like.COT-${yr}-*&order=num_cotizacion.desc&limit=1`
+    );
+    let seq = 1;
+    if (result && result.length > 0) {
+      const lastNum = result[0].num_cotizacion; // e.g. "COT-2026-06003"
+      const parts = lastNum.split('-');
+      if (parts.length >= 3) {
+        const lastSeq = parseInt(parts[2].slice(2)) || 0; // remove month prefix (2 digits)
+        seq = lastSeq + 1;
+      }
     }
-  });
-
-  const seq = String(maxSeq + 1).padStart(3,'0');
-  const num = `COT-${yr}-${mo}${seq}`;
-  document.getElementById('num_cotizacion').value = num;
-  updateCotNum();
+    const num = `COT-${yr}-${mo}${String(seq).padStart(3,'0')}`;
+    document.getElementById('num_cotizacion').value = num;
+    updateCotNum();
+  } catch(e) {
+    // Fallback to local count if Supabase fails
+    const existing = cotizaciones.filter(c => c.num_cotizacion && c.num_cotizacion.startsWith('COT-'+yr) && !c.is_historico).length;
+    const num = `COT-${yr}-${mo}${String(existing+1).padStart(3,'0')}`;
+    document.getElementById('num_cotizacion').value = num;
+    updateCotNum();
+  }
 }
 
 function updateCotNum() {
@@ -1233,7 +1240,7 @@ function updateBulkValueOptions() {
     }
   } else if (field === 'mes_facturacion') {
     mon.style.display = 'inline-block';
-  } else if (field === 'num_po' || field === 'massiel_po') {
+  } else if (field === 'num_po' || field === 'massiel_po' || field === 'wbs') {
     txt.style.display = 'inline-block';
   }
 }
@@ -1248,7 +1255,7 @@ async function applyBulkEdit() {
   } else if (field === 'mes_facturacion') {
     const mon = document.getElementById('bulk-value-month').value;
     if (mon) { const [y,m] = mon.split('-'); value = m+'/'+y; }
-  } else if (field === 'num_po' || field === 'massiel_po') {
+  } else if (field === 'num_po' || field === 'massiel_po' || field === 'wbs') {
     value = document.getElementById('bulk-value-text').value;
   }
 
@@ -1329,8 +1336,6 @@ async function loadFromSupabase(silent=false) {
       updateStats();
     }
     console.log('Loaded', cotizaciones.length, 'cotizaciones from Supabase');
-    // Regenerar número ahora que tenemos los datos reales (solo si no estamos editando)
-    if (!editingId) autoNumCotizacion();
     return cotizaciones;
   } catch(e) {
     if (!silent) hideOverlay();
